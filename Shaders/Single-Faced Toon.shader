@@ -166,7 +166,7 @@ Shader "Custom/Single-Faced Toon"
             ENDCG
         }
 
-        // Pass 2: 描边（保持不变）
+        // Pass 2: 描边
         Pass
         {	
             name "OUTLINE"
