@@ -17,7 +17,7 @@ public class BacklitEffect : MonoBehaviour
     
     [Header("着色器设置")]
     [Range(0, 1)] public float alphaThreshold = 0.1f;  // 透明度阈值
-    [Range(0, 0.1f)] public float blurSize = 0.01f;     // 模糊大小
+    [Range(0, 0.02f)] public float blurSize = 0.005f;  // 模糊大小
     [Range(1, 4)] public int blurIterations = 2;        // 模糊迭代次数
 
     private Material _material;

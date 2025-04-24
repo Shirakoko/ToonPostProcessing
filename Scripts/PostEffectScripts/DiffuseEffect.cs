@@ -19,7 +19,7 @@ public class DiffuseEffect : MonoBehaviour
     [Range(0, 1)] public float alphaThreshold = 0.1f;
     [Range(0, 1)] public float bloomIntensity = 0.5f;
     [Range(0, 1)] public float bloomThreshold = 0.7f;
-    [Range(0, 0.1f)] public float blurSize = 0.01f;
+    [Range(0, 0.02f)] public float blurSize = 0.005f;
     [Range(1, 4)] public int blurIterations = 2;
 
     private Material _material;
