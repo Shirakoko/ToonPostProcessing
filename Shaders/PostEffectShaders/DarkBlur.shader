@@ -70,7 +70,7 @@ Shader "Hidden/DarkBlur"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert_img  // 修改点：替换为vert_img
+            #pragma vertex vert_img
             #pragma fragment frag_shadow_mask
             #include "UnityCG.cginc"
 
@@ -78,24 +78,28 @@ Shader "Hidden/DarkBlur"
             float4 _MainTex_TexelSize;
             float _BlurSize;
 
-            fixed4 frag_shadow_mask (v2f_img i) : SV_Target  // 参数类型改为v2f_img
+            fixed4 frag_shadow_mask (v2f_img i) : SV_Target
             {
-                fixed4 col = tex2D(_MainTex, i.uv);
-
-                // 高斯模糊（保持原算法不变）
-                float weight[3] = {0.227027, 0.316216, 0.070270};
-                float2 offsets[3] = {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0)};
+                // 标准3×3高斯核权重
+                float weights[3][3] = {
+                    {0.0625, 0.125, 0.0625},
+                    {0.125,  0.25,  0.125 },
+                    {0.0625, 0.125, 0.0625}
+                };
+            
+                // 纹理像素大小（用于偏移计算）
+                float2 texelSize = _MainTex_TexelSize.xy * _BlurSize;
                 
-                fixed4 blurredCol = col * weight[0];
-                
-                for(int idx = 1; idx < 3; idx++)
-                {
-                    float2 offset = _MainTex_TexelSize.xy * offsets[idx] * _BlurSize;
-                    blurredCol += tex2D(_MainTex, i.uv + offset) * weight[idx];
-                    blurredCol += tex2D(_MainTex, i.uv - offset) * weight[idx];
+                fixed4 col = fixed4(0, 0, 0, 0);
+                // 遍历3×3邻域
+                for (int x = -1; x <= 1; x++) {
+                    for (int y = -1; y <= 1; y++) {
+                        float2 offset = float2(x, y) * texelSize;
+                        col += tex2D(_MainTex, i.uv + offset) * weights[x+1][y+1];
+                    }
                 }
                 
-                return blurredCol;
+                return col;
             }
             ENDCG
         }
