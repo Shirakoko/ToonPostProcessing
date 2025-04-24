@@ -65,6 +65,7 @@ public class DiffuseEffect : MonoBehaviour
         // 创建临时纹理
         RenderTexture compositeRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
         RenderTexture brightRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture blurredBrightRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
         
         // Pass 0: 双摄像机合成
         _material.SetTexture("_CharacterTex", characterTexture);
@@ -94,15 +95,17 @@ public class DiffuseEffect : MonoBehaviour
             if (currentBlur != brightRT) RenderTexture.ReleaseTemporary(currentBlur);
             currentBlur = nextBlur;
         }
+
+        // 将最终模糊结果复制到blurredBrightRT
+        Graphics.Blit(currentBlur, blurredBrightRT);
         
         // Pass 3: 最终合成
         _material.SetTexture("_MainTex", compositeRT);
         _material.SetTexture("_BloomTex", currentBlur);
         Graphics.Blit(null, dest, _material, 3);
         
-        // 释放RT
         if (currentBlur != brightRT) RenderTexture.ReleaseTemporary(currentBlur);
-        CleanupRTs(compositeRT, brightRT);
+        CleanupRTs(compositeRT, blurredBrightRT, brightRT);
     }
 
     void CleanupRTs(params RenderTexture[] rts)
