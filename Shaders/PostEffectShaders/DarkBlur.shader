@@ -10,7 +10,7 @@ Shader "Hidden/DarkBlur"
         _BrightnessThreshold ("Brightness Threshold", Range(0,1)) = 0.5
         _ClearColor ("Clear Color", Color) = (0,0,0,0)
         _BlurSize ("Blur Size", Range(0, 0.01)) = 0.005
-        _BlurredColor ("Shadow Color", Color) = (0.5,0.5,0.5,1)
+        _BlurredColor ("Blurred Color", Color) = (0.5,0.5,0.5,1)
     }
     
     SubShader
@@ -60,8 +60,7 @@ Shader "Hidden/DarkBlur"
                 float diffuseCol = tex2D(_DiffuseRT, i.uv).r;
                 
                 // 如果在阴影遮罩内，返回颜色，否则返回透明
-                fixed4 result = (diffuseCol == 0.0) ? fixed4(1,1,1,1) : _ClearColor;
-                return result;
+                return (diffuseCol == 0.0) ? fixed4(1,1,1,1) : _ClearColor;;
             }
             ENDCG
         }
@@ -71,14 +70,14 @@ Shader "Hidden/DarkBlur"
         {
             CGPROGRAM
             #pragma vertex vert_img
-            #pragma fragment frag_shadow_mask
+            #pragma fragment frag_dark_area_mask
             #include "UnityCG.cginc"
 
             sampler2D _MainTex;
             float4 _MainTex_TexelSize;
             float _BlurSize;
 
-            fixed4 frag_shadow_mask (v2f_img i) : SV_Target
+            fixed4 frag_dark_area_mask (v2f_img i) : SV_Target
             {
                 // 标准3×3高斯核权重
                 float weights[3][3] = {
@@ -109,19 +108,18 @@ Shader "Hidden/DarkBlur"
         {
             CGPROGRAM
             #pragma vertex vert_img
-            #pragma fragment frag_shadow_alpha
+            #pragma fragment frag_dark_area_alpha
             #include "UnityCG.cginc"
 
             fixed4 _BlurredColor;
-            sampler2D _ShadowMaskTex;
+            sampler2D _DarkMaskTex;
 
-            fixed4 frag_shadow_alpha (v2f_img i) : SV_Target
+            fixed4 frag_dark_area_alpha (v2f_img i) : SV_Target
             {
-                fixed4 maskCol = tex2D(_ShadowMaskTex, i.uv);
+                fixed4 maskCol = tex2D(_DarkMaskTex, i.uv);
                 
-                // 使用遮罩的alpha控制白色强度
-                fixed4 result = lerp(fixed4(0,0,0,0), _BlurredColor, maskCol.a);
-                result.a = 1.0 - result.a;
+                fixed4 result = lerp(fixed4(0,0,0,0), _BlurredColor, maskCol.a); // 颜色映射
+                result.a = 1.0 - result.a; // 使用遮罩的alpha控制白色强度
                 return result;
             }
             ENDCG
@@ -137,17 +135,17 @@ Shader "Hidden/DarkBlur"
 
             sampler2D _CharacterTex;
             sampler2D _BackgroundTex;
-            sampler2D _ShadowTex;
+            sampler2D _DarkAreaTex;
             float _Threshold;
 
             fixed4 frag_final (v2f_img i) : SV_Target
             {
                 fixed4 charCol = tex2D(_CharacterTex, i.uv);
-                fixed4 shadowCol = tex2D(_ShadowTex, i.uv);
+                fixed4 darkAreaCol = tex2D(_DarkAreaTex, i.uv);
                 fixed4 bgCol = tex2D(_BackgroundTex, i.uv);
                 
                 // Multiply + Add 混合
-                fixed3 blendedColor = charCol.rgb * (1.0 + shadowCol.rgb * shadowCol.a);
+                fixed3 blendedColor = charCol.rgb * (1.0 + darkAreaCol.rgb * darkAreaCol.a);
                 blendedColor = min(blendedColor, 1.0); // 限制亮度不超过1.0
             
                 return (charCol.a > _Threshold) ? fixed4(blendedColor, charCol.a) : bgCol;

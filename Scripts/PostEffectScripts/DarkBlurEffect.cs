@@ -64,9 +64,9 @@ public class DarkBlurEffect : MonoBehaviour
         
         // 创建临时纹理
         RenderTexture compositeRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
-        RenderTexture whiteShadowRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
-        RenderTexture shadowMaskRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
-        RenderTexture finalShadowRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture darkAreaRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture darkSoftAreaRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture finalDarkAreaRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
         
         // Pass 0: 双摄像机合成
         _material.SetTexture("_CharacterTex", characterTexture);
@@ -76,18 +76,18 @@ public class DarkBlurEffect : MonoBehaviour
         // 未开启特效则直接输出渲染结果
         if(!enableEffect) {
             Graphics.Blit(compositeRT, dest);
-            CleanupRTs(compositeRT, whiteShadowRT, shadowMaskRT, finalShadowRT);
+            CleanupRTs(compositeRT, darkAreaRT, darkSoftAreaRT, finalDarkAreaRT);
             return;
         }
 
-        // 得到角色摄像机上的渲染脚本保存的DiffuseRT对象，设置给shadowRT
+        // 得到角色摄像机上的渲染脚本保存的DiffuseRT对象，设置给_DiffuseRT
         var diffuseRT = characterCamera.GetComponent<Test>().DiffuseRT;
         _material.SetTexture("_DiffuseRT", diffuseRT);
-        // Pass 1: 分离亮部和暗部，暗部保存到shadowRT
-        Graphics.Blit(null, whiteShadowRT, _material, 1);
+        // Pass 1: 分离亮部和暗部
+        Graphics.Blit(null, darkAreaRT, _material, 1);
 
         // Pass3: 生成纯白模糊阴影遮罩
-        RenderTexture currentBlur = whiteShadowRT;
+        RenderTexture currentBlur = darkAreaRT;
         for (int i = 0; i < blurIterations; i++)
         {
             RenderTexture nextBlur = RenderTexture.GetTemporary(
@@ -97,27 +97,27 @@ public class DarkBlurEffect : MonoBehaviour
             _material.SetVector("_MainTex_TexelSize", new Vector4(1.0f/currentBlur.width, 1.0f/currentBlur.height, currentBlur.width, currentBlur.height));
             Graphics.Blit(null, nextBlur, _material, 2);
             
-            if (currentBlur != whiteShadowRT) RenderTexture.ReleaseTemporary(currentBlur);
+            if (currentBlur != darkAreaRT) RenderTexture.ReleaseTemporary(currentBlur);
             currentBlur = nextBlur;
         }
         
-        // 将最终模糊结果复制到shadowMaskRT
-        Graphics.Blit(currentBlur, shadowMaskRT);
-        if (currentBlur != whiteShadowRT) RenderTexture.ReleaseTemporary(currentBlur);
+        // 将最终模糊结果复制到darkSoftAreaRT
+        Graphics.Blit(currentBlur, darkSoftAreaRT);
+        if (currentBlur != darkAreaRT) RenderTexture.ReleaseTemporary(currentBlur);
         
-        // Pass 3: 合成阴影并取反alpha
+        // Pass 3: 合成暗部
         _material.SetColor("_BlurredColor", blurredColor);
-        _material.SetTexture("_ShadowMaskTex", shadowMaskRT);
-        Graphics.Blit(null, finalShadowRT, _material, 3);
+        _material.SetTexture("_DarkMaskTex", darkSoftAreaRT);
+        Graphics.Blit(null, finalDarkAreaRT, _material, 3);
 
         
-        // Pass 4: 最终合成 (Screen模式)
+        // Pass 4: 最终合成 (Multiply+Add模式)
         _material.SetTexture("_CharacterTex", characterTexture);
-        _material.SetTexture("_ShadowTex", finalShadowRT);
-        Graphics.Blit(compositeRT, dest, _material, 4);
+        _material.SetTexture("_DarkAreaTex", finalDarkAreaRT);
+        Graphics.Blit(null, dest, _material, 4);
         
         // 释放RT
-        CleanupRTs(compositeRT, whiteShadowRT, shadowMaskRT, finalShadowRT);
+        CleanupRTs(compositeRT, darkAreaRT, darkSoftAreaRT, finalDarkAreaRT);
     }
 
     void CleanupRTs(params RenderTexture[] rts)
