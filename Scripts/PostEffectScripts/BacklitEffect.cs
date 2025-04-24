@@ -24,15 +24,12 @@ public class BacklitEffect : MonoBehaviour
 
     void OnEnable()
     {
-        // 初始化材质
-        Shader shader = Shader.Find("Hidden/Backlit");
-        _material = new Material(shader);
+        _material = new Material(Shader.Find("Hidden/Backlit"));
         _material.hideFlags = HideFlags.HideAndDontSave;
         
         // 设置摄像机深度
         GetComponent<Camera>().depth = 2;
 
-        // 确保角色摄像机正确设置
         if (characterCamera != null)
         {
             characterCamera.depth = 1;
@@ -41,7 +38,6 @@ public class BacklitEffect : MonoBehaviour
             characterCamera.targetTexture = characterTexture;
         }
         
-        // 背景摄像机设置
         if (backgroundCamera != null)
         {
             backgroundCamera.depth = 0;

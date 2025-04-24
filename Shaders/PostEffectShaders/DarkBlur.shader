@@ -10,6 +10,7 @@ Shader "Hidden/DarkBlur"
         _BrightnessThreshold ("Brightness Threshold", Range(0,1)) = 0.5
         _ClearColor ("Clear Color", Color) = (0,0,0,0)
         _BlurSize ("Blur Size", Range(0, 0.01)) = 0.005
+        _BlurredColor ("Shadow Color", Color) = (0.5,0.5,0.5,1)
     }
     
     SubShader
@@ -22,36 +23,15 @@ Shader "Hidden/DarkBlur"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_composite
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _CharacterTex;
             sampler2D _BackgroundTex;
             float _Threshold;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_composite (v2f i) : SV_Target
+            fixed4 frag_composite (v2f_img i) : SV_Target
             {
                 fixed4 bgCol = tex2D(_BackgroundTex, i.uv);
                 fixed4 charCol = tex2D(_CharacterTex, i.uv);
@@ -62,40 +42,19 @@ Shader "Hidden/DarkBlur"
             ENDCG
         }
 
-        // Pass 1: 根据_DiffuseRT硬阴影得到纯白色硬暗部
+        // Pass 1: 根据暗部遮罩得到纯白色硬边缘暗部
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_separate
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _CharacterTex;
             sampler2D _DiffuseRT;
             fixed4 _ClearColor;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_separate (v2f i) : SV_Target
+            fixed4 frag_separate (v2f_img i) : SV_Target
             {
                 fixed4 charCol = tex2D(_CharacterTex, i.uv);
                 float diffuseCol = tex2D(_DiffuseRT, i.uv).r;
@@ -111,40 +70,19 @@ Shader "Hidden/DarkBlur"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img  // 修改点：替换为vert_img
             #pragma fragment frag_shadow_mask
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _MainTex;
             float4 _MainTex_TexelSize;
             float _BlurSize;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_shadow_mask (v2f i) : SV_Target
+            fixed4 frag_shadow_mask (v2f_img i) : SV_Target  // 参数类型改为v2f_img
             {
                 fixed4 col = tex2D(_MainTex, i.uv);
 
-                // 高斯模糊
+                // 高斯模糊（保持原算法不变）
                 float weight[3] = {0.227027, 0.316216, 0.070270};
                 float2 offsets[3] = {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0)};
                 
@@ -162,89 +100,47 @@ Shader "Hidden/DarkBlur"
             ENDCG
         }
 
-        // Pass 4: 合成阴影并取反alpha
+        // Pass 3: 合成阴影并取反alpha
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_shadow_alpha
-
             #include "UnityCG.cginc"
 
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
+            fixed4 _BlurredColor;
+            sampler2D _ShadowMaskTex;
 
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
-
-            fixed4 _ShadowColor;
-            sampler2D _ShadowMaskTex; // Pass2的输出 (模糊遮罩)
-
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_shadow_alpha (v2f i) : SV_Target
+            fixed4 frag_shadow_alpha (v2f_img i) : SV_Target
             {
                 fixed4 maskCol = tex2D(_ShadowMaskTex, i.uv);
                 
                 // 使用遮罩的alpha控制白色强度
-                fixed4 result = lerp(fixed4(0,0,0,0), _ShadowColor, maskCol.a);
+                fixed4 result = lerp(fixed4(0,0,0,0), _BlurredColor, maskCol.a);
                 result.a = 1.0 - result.a;
                 return result;
             }
             ENDCG
         }
 
-        // Pass 4: 最终合成 (Screen模式)
+        // Pass 4: 最终合成 (Multiply + Add模式)
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_final
-
             #include "UnityCG.cginc"
 
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
-
-            sampler2D _CharacterTex;  // 角色纹理
-            sampler2D _BackgroundTex; // 背景纹理
-            sampler2D _ShadowTex;     // Pass3的输出 (带alpha的阴影)
+            sampler2D _CharacterTex;
+            sampler2D _BackgroundTex;
+            sampler2D _ShadowTex;
             float _Threshold;
 
-            v2f vert (appdata v)
+            fixed4 frag_final (v2f_img i) : SV_Target
             {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_final (v2f i) : SV_Target
-            {
-                fixed4 charCol = tex2D(_CharacterTex, i.uv); // 角色颜色
-                fixed4 shadowCol = tex2D(_ShadowTex, i.uv); // 阴影颜色（RGB）和透明度（A）
-                fixed4 bgCol = tex2D(_BackgroundTex, i.uv); // 背景颜色
+                fixed4 charCol = tex2D(_CharacterTex, i.uv);
+                fixed4 shadowCol = tex2D(_ShadowTex, i.uv);
+                fixed4 bgCol = tex2D(_BackgroundTex, i.uv);
                 
                 // Multiply + Add 混合
                 fixed3 blendedColor = charCol.rgb * (1.0 + shadowCol.rgb * shadowCol.a);

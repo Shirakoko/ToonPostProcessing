@@ -20,7 +20,7 @@ public class DarkBlurEffect : MonoBehaviour
     [Range(0, 1)] public float brightnessThreshold = 0.5f;
     [Range(0, 0.02f)] public float blurSize = 0.005f;
     [Range(1, 4)] public int blurIterations = 2;
-    public Color shadowColor = Color.grey;
+    public Color blurredColor = Color.grey;
 
     private Material _material;
 
@@ -106,7 +106,7 @@ public class DarkBlurEffect : MonoBehaviour
         if (currentBlur != whiteShadowRT) RenderTexture.ReleaseTemporary(currentBlur);
         
         // Pass 3: 合成阴影并取反alpha
-        _material.SetColor("_ShadowColor", shadowColor);
+        _material.SetColor("_BlurredColor", blurredColor);
         _material.SetTexture("_ShadowMaskTex", shadowMaskRT);
         Graphics.Blit(null, finalShadowRT, _material, 3);
 
