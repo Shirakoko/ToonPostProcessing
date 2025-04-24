@@ -59,9 +59,9 @@ public class BacklitEffect : MonoBehaviour
         }
 
         // 创建临时渲染纹理
-        RenderTexture tempRT1 = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
-        RenderTexture tempRT2 = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
-        RenderTexture tempRT3 = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture bgWithoutCharacterRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture bgBlurredRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
+        RenderTexture characterMaskRT = RenderTexture.GetTemporary(src.width, src.height, 0, src.format);
 
         if(!enableEffect) {
             // Pass 0: 双摄像机合成
@@ -71,16 +71,15 @@ public class BacklitEffect : MonoBehaviour
             return;
         }
 
-        // Pass1：抠图，保存结果到tempRT1
+        // Pass1：从背景中抠除角色，保存结果到bgWithoutCharacterRT
         _material.SetTexture("_CharacterTex", characterTexture);
         _material.SetTexture("_BackgroundTex", backgroundTexture);
         _material.SetFloat("_Threshold", alphaThreshold);
-        Graphics.Blit(null, tempRT1, _material, 1);
+        Graphics.Blit(null, bgWithoutCharacterRT, _material, 1);
 
-        // Pass2：模糊tempRT1，保存结果到tempRT2
-        // 使用迭代模糊处理
+        // Pass2：模糊bgWithoutCharacterRT，保存结果到bgBlurredRT
         _material.SetFloat("_BlurSize", blurSize);
-        RenderTexture currentBlur = tempRT1;
+        RenderTexture currentBlur = bgWithoutCharacterRT;
         for (int i = 0; i < blurIterations; i++)
         {
             RenderTexture nextBlur = RenderTexture.GetTemporary(
@@ -90,28 +89,33 @@ public class BacklitEffect : MonoBehaviour
             _material.SetVector("_MainTex_TexelSize", new Vector4(1.0f/currentBlur.width, 1.0f/currentBlur.height, currentBlur.width, currentBlur.height));
             Graphics.Blit(null, nextBlur, _material, 2);
             
-            if (currentBlur != tempRT1) RenderTexture.ReleaseTemporary(currentBlur);
+            if (currentBlur != bgWithoutCharacterRT) RenderTexture.ReleaseTemporary(currentBlur);
             currentBlur = nextBlur;
         }
         
-        // 将最终模糊结果复制到tempRT2
-        Graphics.Blit(currentBlur, tempRT2);
-        if (currentBlur != tempRT1) RenderTexture.ReleaseTemporary(currentBlur);
+        // 将最终模糊结果复制到bgBlurredRT
+        Graphics.Blit(currentBlur, bgBlurredRT);
+        if (currentBlur != bgWithoutCharacterRT) RenderTexture.ReleaseTemporary(currentBlur);
 
-        // Pass3：模糊后的结果和characterMask取交集，保存结果到tempRT3
-        _material.SetTexture("_CharacterTex", characterTexture);
-        _material.SetTexture("_MainTex", tempRT2);
+        // Pass3：模糊后的结果和characterTexture取交集，保存结果到characterMaskRT
+        _material.SetTexture("_MainTex", bgBlurredRT);
         _material.SetFloat("_Threshold", alphaThreshold);
-        Graphics.Blit(null, tempRT3, _material, 3);
+        Graphics.Blit(null, characterMaskRT, _material, 3);
 
-        // 最终合成
-        _material.SetTexture("_MaskedBlurTex", tempRT3);
+        // Pass 4: 最终合成
+        _material.SetTexture("_MaskedBlurTex", characterMaskRT);
         Graphics.Blit(null, dest, _material, 4);
 
         // 释放临时渲染纹理
-        RenderTexture.ReleaseTemporary(tempRT1);
-        RenderTexture.ReleaseTemporary(tempRT2);
-        RenderTexture.ReleaseTemporary(tempRT3);
+        CleanupRTs(bgWithoutCharacterRT, bgBlurredRT, characterMaskRT);
+    }
+
+    void CleanupRTs(params RenderTexture[] rts)
+    {
+        foreach (var rt in rts)
+        {
+            if (rt != null) RenderTexture.ReleaseTemporary(rt);
+        }
     }
 
     void OnDisable()

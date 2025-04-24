@@ -16,192 +16,100 @@ Shader "Hidden/Backlit"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_composite
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _CharacterTex;
             sampler2D _BackgroundTex;
             float _Threshold;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_composite (v2f i) : SV_Target
+            fixed4 frag_composite (v2f_img i) : SV_Target
             {
                 fixed4 bgCol = tex2D(_BackgroundTex, i.uv);
                 fixed4 charCol = tex2D(_CharacterTex, i.uv);
-                
-                // 根据alpha阈值混合
                 return (charCol.a > _Threshold) ? charCol : bgCol;
             }
             ENDCG
         }
         
-        // Pass 1: 抠图 (原样保留)
+        // Pass 1: 从背景中抠除角色
         Pass
         {
-            Name "CHARACTER_MASK"
             CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+            #pragma vertex vert_img
+            #pragma fragment frag_mask
             #include "UnityCG.cginc"
-            
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-            
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
             
             sampler2D _CharacterTex;
             sampler2D _BackgroundTex;
             float _Threshold;
             fixed4 _ClearColor;
             
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-            
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag_mask (v2f_img i) : SV_Target
             {
                 fixed4 character = tex2D(_CharacterTex, i.uv);
                 fixed4 background = tex2D(_BackgroundTex, i.uv);
-                
                 return (character.a > _Threshold) ? _ClearColor : background;
             }
             ENDCG
         }
         
-        // Pass 2: 模糊处理
+        // Pass 2: 高斯模糊处理
         Pass
         {
-            Name "BACKGROUND_BLUR"
             CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+            #pragma vertex vert_img
+            #pragma fragment frag_blur
             #include "UnityCG.cginc"
             
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-            
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
-            
-            sampler2D _MainTex; // 使用标准名称
+            sampler2D _MainTex;
             float _BlurSize;
             float4 _MainTex_TexelSize;
             
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-            
-            fixed4 frag (v2f i) : SV_Target
-            {
-                // 3x3高斯卷积核权重
-                float kernel[9] = {
-                    0.077847, 0.123317, 0.077847,
-                    0.123317, 0.195346, 0.123317,
-                    0.077847, 0.123317, 0.077847
+            fixed4 frag_blur (v2f_img i) : SV_Target {
+                // 标准3×3高斯核权重
+                float weights[3][3] = {
+                    {0.0625, 0.125, 0.0625},
+                    {0.125,  0.25,  0.125 },
+                    {0.0625, 0.125, 0.0625}
                 };
+            
+                // 纹理像素大小（用于偏移计算）
+                float2 texelSize = _MainTex_TexelSize.xy * _BlurSize;
                 
-                fixed4 color = fixed4(0, 0, 0, 0);
-                int index = 0;
-                
-                // 3x3卷积核采样
-                for (int y = -1; y <= 1; y++)
-                {
-                    for (int x = -1; x <= 1; x++)
-                    {
-                        float2 offset = float2(x, y) * _MainTex_TexelSize.xy * _BlurSize;
-                        fixed4 sample = tex2D(_MainTex, i.uv + offset);
-                        color += sample * kernel[index];
-                        index++;
+                fixed4 col = fixed4(0, 0, 0, 0);
+                // 遍历3×3邻域
+                for (int x = -1; x <= 1; x++) {
+                    for (int y = -1; y <= 1; y++) {
+                        float2 offset = float2(x, y) * texelSize;
+                        col += tex2D(_MainTex, i.uv + offset) * weights[x+1][y+1];
                     }
                 }
                 
-                return color;
+                return col;
             }
             ENDCG
         }
         
-        // Pass 3: 与角色mask取交集
+        // Pass 3: 模糊遮罩与角色取交集
         Pass
         {
-            Name "MASK_INTERSECTION"
             CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+            #pragma vertex vert_img
+            #pragma fragment frag_intersect
             #include "UnityCG.cginc"
             
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-            
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
-            
             sampler2D _CharacterTex;
-            sampler2D _MainTex; // Pass2的结果
+            sampler2D _MainTex;
             float _Threshold;
             fixed4 _ClearColor;
             
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-            
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag_intersect (v2f_img i) : SV_Target
             {
                 fixed4 character = tex2D(_CharacterTex, i.uv);
-                fixed4 blurred = tex2D(_MainTex, i.uv);
-
-                return (character.a > _Threshold) ? blurred : _ClearColor;
+                fixed4 blurredCol = tex2D(_MainTex, i.uv);
+                return (character.a > _Threshold) ? blurredCol : _ClearColor;
             }
             ENDCG
         }
@@ -209,60 +117,33 @@ Shader "Hidden/Backlit"
         // Pass 4: 最终合成
         Pass
         {
-            Name "FINAL_COMPOSITE"
             CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+            #pragma vertex vert_img
+            #pragma fragment frag_final
             #include "UnityCG.cginc"
-            
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-            
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
             
             sampler2D _CharacterTex;
             sampler2D _BackgroundTex;
+            sampler2D _MaskedBlurTex;
             float _Threshold;
-            sampler2D _MaskedBlurTex; // Pass3的结果
             
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-            
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag_final (v2f_img i) : SV_Target
             {
                 fixed4 character = tex2D(_CharacterTex, i.uv);
                 fixed4 originalBG = tex2D(_BackgroundTex, i.uv);
                 fixed4 maskedBlur = tex2D(_MaskedBlurTex, i.uv);
                 
-                // 直接合成
-                // 绘制背景
                 fixed4 final = originalBG;
-    
                 if (character.a > _Threshold) 
                 {
-                    // 加法混合（直接提亮）
+                    // 加法混合
                     fixed3 additiveBlend = character.rgb + maskedBlur.rgb;
-                    
-                    // 控制混合程度
+                    // maskedBlur.a控制混合程度
                     final.rgb = lerp(character.rgb, additiveBlend, maskedBlur.a);
                 }
-                
                 return final;
             }
             ENDCG
         }
     }
-    FallBack "Diffuse"
 }

@@ -22,36 +22,15 @@ Shader "Hidden/Diffuse"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_composite
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _CharacterTex;
             sampler2D _BackgroundTex;
             float _Threshold;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_composite (v2f i) : SV_Target
+            fixed4 frag_composite (v2f_img i) : SV_Target
             {
                 fixed4 bgCol = tex2D(_BackgroundTex, i.uv);
                 fixed4 charCol = tex2D(_CharacterTex, i.uv);
@@ -66,35 +45,14 @@ Shader "Hidden/Diffuse"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_brightness
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _MainTex;
             float _BloomThreshold;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_brightness (v2f i) : SV_Target
+            fixed4 frag_brightness (v2f_img i) : SV_Target
             {
                 fixed4 col = tex2D(_MainTex, i.uv);
                 float brightness = dot(col.rgb, float3(0.2126, 0.7152, 0.0722));
@@ -104,52 +62,36 @@ Shader "Hidden/Diffuse"
             ENDCG
         }
 
-        // Pass 2: 模糊处理 (高斯模糊)
+        // Pass 2: 高斯模糊处理
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_blur
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _MainTex;
             float4 _MainTex_TexelSize;
             float _BlurSize;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_blur (v2f i) : SV_Target
-            {
-                // 简单的高斯模糊核
-                float weight[3] = {0.227027, 0.316216, 0.070270};
-                float2 offsets[3] = {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0)};
+            fixed4 frag_blur (v2f_img i) : SV_Target {
+                // 标准3×3高斯核权重
+                float weights[3][3] = {
+                    {0.0625, 0.125, 0.0625},
+                    {0.125,  0.25,  0.125 },
+                    {0.0625, 0.125, 0.0625}
+                };
+            
+                // 纹理像素大小（用于偏移计算）
+                float2 texelSize = _MainTex_TexelSize.xy * _BlurSize;
                 
-                fixed4 col = tex2D(_MainTex, i.uv) * weight[0];
-                
-                for(int idx = 1; idx < 3; idx++)
-                {
-                    float2 offset = _MainTex_TexelSize.xy * offsets[idx] * _BlurSize;
-                    col += tex2D(_MainTex, i.uv + offset) * weight[idx];
-                    col += tex2D(_MainTex, i.uv - offset) * weight[idx];
+                fixed4 col = fixed4(0, 0, 0, 0);
+                // 遍历3×3邻域
+                for (int x = -1; x <= 1; x++) {
+                    for (int y = -1; y <= 1; y++) {
+                        float2 offset = float2(x, y) * texelSize;
+                        col += tex2D(_MainTex, i.uv + offset) * weights[x+1][y+1];
+                    }
                 }
                 
                 return col;
@@ -161,41 +103,20 @@ Shader "Hidden/Diffuse"
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert
+            #pragma vertex vert_img
             #pragma fragment frag_final
-
             #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
 
             sampler2D _MainTex;       // 合成后的场景
             sampler2D _BloomTex;      // 模糊后的高光
             float _BloomIntensity;
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            fixed4 frag_final (v2f i) : SV_Target
+            fixed4 frag_final (v2f_img i) : SV_Target
             {
                 fixed4 sceneCol = tex2D(_MainTex, i.uv);
                 fixed4 bloomCol = tex2D(_BloomTex, i.uv);
                 
-                // 使用变亮混合模式 (Screen模式) 合成Bloom效果
+                // 使用变亮混合模式 (Screen模式) 叠加
                 fixed3 result = 1.0 - (1.0 - sceneCol.rgb) * (1.0 - bloomCol.rgb * _BloomIntensity);
                 
                 return fixed4(result, sceneCol.a);
