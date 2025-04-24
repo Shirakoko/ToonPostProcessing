@@ -2,7 +2,7 @@ using UnityEngine;
 
 [ExecuteInEditMode]
 [RequireComponent(typeof(Camera))]
-public class ShadowBlurEffect : MonoBehaviour
+public class DarkBlurEffect : MonoBehaviour
 {
     [Header("效果控制开关")]
     public bool enableEffect = true;
@@ -26,7 +26,7 @@ public class ShadowBlurEffect : MonoBehaviour
 
     void OnEnable()
     {
-        _material = new Material(Shader.Find("Hidden/ShadowBlur"));
+        _material = new Material(Shader.Find("Hidden/DarkBlur"));
         _material.hideFlags = HideFlags.HideAndDontSave;
         
         // 设置摄像机
