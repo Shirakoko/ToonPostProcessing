@@ -17,7 +17,6 @@ public class DarkBlurEffect : MonoBehaviour
     
     [Header("效果参数")]
     [Range(0, 1)] public float alphaThreshold = 0.1f;
-    [Range(0, 1)] public float brightnessThreshold = 0.5f;
     [Range(0, 0.02f)] public float blurSize = 0.005f;
     [Range(1, 4)] public int blurIterations = 2;
     public Color blurredColor = Color.grey;
@@ -58,7 +57,6 @@ public class DarkBlurEffect : MonoBehaviour
         
         // 设置参数
         _material.SetFloat("_Threshold", alphaThreshold);
-        _material.SetFloat("_BrightnessThreshold", brightnessThreshold);
         _material.SetFloat("_BlurSize", blurSize / 10);
 
         

@@ -7,7 +7,6 @@ Shader "Hidden/DarkBlur"
         _Threshold ("Alpha Threshold", Range(0,1)) = 0.1
         
         // 阴影效果参数
-        _BrightnessThreshold ("Brightness Threshold", Range(0,1)) = 0.5
         _ClearColor ("Clear Color", Color) = (0,0,0,0)
         _BlurSize ("Blur Size", Range(0, 0.01)) = 0.005
         _BlurredColor ("Blurred Color", Color) = (0.5,0.5,0.5,1)
@@ -53,14 +52,17 @@ Shader "Hidden/DarkBlur"
             sampler2D _CharacterTex;
             sampler2D _DiffuseRT;
             fixed4 _ClearColor;
+            float _Threshold;
 
             fixed4 frag_separate (v2f_img i) : SV_Target
             {
                 fixed4 charCol = tex2D(_CharacterTex, i.uv);
                 float diffuseCol = tex2D(_DiffuseRT, i.uv).r;
+
+                // 如果在阴影遮罩内，返回白色，否则返回透明
+                fixed4 col = (diffuseCol == 0.0) ? fixed4(1,1,1,1) : _ClearColor;
                 
-                // 如果在阴影遮罩内，返回颜色，否则返回透明
-                return (diffuseCol == 0.0) ? fixed4(1,1,1,1) : _ClearColor;;
+                return (charCol.a > _Threshold) ? col : _ClearColor;
             }
             ENDCG
         }
